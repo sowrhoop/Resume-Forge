@@ -1,0 +1,105 @@
+version: "3.9"
+
+x-resume-forge-env: &resume-forge-env
+  NODE_ENV: development
+  PORT: 3000
+  PUBLIC_URL: '${PUBLIC_URL:-http://localhost:3000}'
+  STORAGE_URL: '${STORAGE_URL:-http://localhost:9000/resumes}'
+  DATABASE_URL: '${DATABASE_URL:-postgresql://resume_forge:resume_forge@postgres:5432/resume_forge?schema=public}'
+  ACCESS_TOKEN_SECRET: '${ACCESS_TOKEN_SECRET:-dev-access-token}'
+  REFRESH_TOKEN_SECRET: '${REFRESH_TOKEN_SECRET:-dev-refresh-token}'
+  CHROME_URL: '${CHROME_URL:-ws://browserless:3000}'
+  CHROME_TOKEN: '${CHROME_TOKEN:-dev-browserless-token}'
+  CHROME_IGNORE_HTTPS_ERRORS: '${CHROME_IGNORE_HTTPS_ERRORS:-true}'
+  MAIL_FROM: '${MAIL_FROM:-Resume Forge <noreply@example.com>}'
+  SMTP_URL: '${SMTP_URL:-smtp://mail:1025}'
+  STORAGE_ENDPOINT: minio
+  STORAGE_PORT: 9000
+  STORAGE_REGION: '${STORAGE_REGION:-us-east-1}'
+  STORAGE_BUCKET: '${STORAGE_BUCKET:-resumes}'
+  STORAGE_ACCESS_KEY: '${STORAGE_ACCESS_KEY:-minioadmin}'
+  STORAGE_SECRET_KEY: '${STORAGE_SECRET_KEY:-minioadmin}'
+  STORAGE_USE_SSL: '${STORAGE_USE_SSL:-false}'
+  STORAGE_SKIP_BUCKET_CHECK: '${STORAGE_SKIP_BUCKET_CHECK:-false}'
+  DISABLE_SIGNUPS: '${DISABLE_SIGNUPS:-false}'
+  DISABLE_EMAIL_AUTH: '${DISABLE_EMAIL_AUTH:-false}'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-resume_forge}
+      POSTGRES_USER: ${POSTGRES_USER:-resume_forge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-resume_forge}
+    ports:
+      - "${FORWARD_DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d ${POSTGRES_DB:-resume_forge} -U ${POSTGRES_USER:-resume_forge}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:RELEASE.2024-09-26T15-33-04Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-minioadmin}
+      MINIO_BROWSER_REDIRECT_URL: '${MINIO_BROWSER_REDIRECT_URL:-http://localhost:9001}'
+    ports:
+      - "${FORWARD_MINIO_API_PORT:-9000}:9000"
+      - "${FORWARD_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+
+  browserless:
+    image: browserless/chrome:2.17.1
+    restart: unless-stopped
+    environment:
+      TOKEN: '${CHROME_TOKEN:-dev-browserless-token}'
+      EXIT_ON_HEALTH_FAILURE: "true"
+    ports:
+      - "${FORWARD_BROWSERLESS_PORT:-3001}:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  mail:
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    ports:
+      - "${FORWARD_SMTP_PORT:-1025}:1025"
+      - "${FORWARD_MAIL_UI_PORT:-8025}:8025"
+
+  resume-forge:
+    profiles:
+      - app
+    build:
+      context: ../..
+      dockerfile: ../../Dockerfile
+      target: release
+      args:
+        NX_CLOUD_ACCESS_TOKEN: ${NX_CLOUD_ACCESS_TOKEN:-}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      browserless:
+        condition: service_started
+      mail:
+        condition: service_started
+    environment:
+      <<: *resume-forge-env
+    ports:
+      - "${PORT:-3000}:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres_data:
+  minio_data:

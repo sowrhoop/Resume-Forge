@@ -84,6 +84,26 @@ Start creating your standout resume with Reactive Resume today!
 
 - LinguiJS (for translation management and localization)
 
+## Deployment
+
+Reactive Resume now ships with container recipes that cover both production and local development.
+
+### Production (prebuilt image)
+
+1. Copy the sample environment file and adjust the secrets: `cp tools/compose/.env.example .env`
+2. (Optional) Set `RESUME_FORGE_IMAGE` or point to your forked registry.
+3. Launch the full stack: `docker compose up -d`
+
+The `compose.yml` stack brings up PostgreSQL, MinIO, Browserless, MailHog, and the `resume-forge` application container. All ports are exposed on the host for quick validation.
+
+### Development (host-driven)
+
+1. Start the dependencies: `docker compose -f compose.dev.yml up -d postgres minio browserless mail`
+2. Install packages and run the Nx dev servers from the host: `pnpm install && pnpm dev`
+3. When you need the containerised app, enable the optional profile: `docker compose -f compose.dev.yml --profile app up`
+
+Both Compose files honour the variables defined in `tools/compose/.env.example` and accept overrides via the standard `.env` mechanism.
+
 ## Star History
 
 <a href="https://star-history.com/#AmruthPillai/Reactive-Resume&Date">
