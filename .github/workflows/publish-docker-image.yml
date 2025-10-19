@@ -84,6 +84,8 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.platform }},mode=max
           outputs: type=image,name=${{ steps.image.outputs.image }},push-by-digest=true,name-canonical=true,push=true
           target: release
+          provenance: mode=max
+          sbom: true
           build-args: |
             NX_CLOUD_ACCESS_TOKEN=${{ secrets.NX_CLOUD_ACCESS_TOKEN }}
 
@@ -156,3 +158,14 @@ jobs:
         run: |
           docker buildx imagetools inspect ${{ needs.build.outputs.image }}:${{ steps.meta.outputs.version }}
           docker buildx imagetools inspect ${{ needs.build.outputs.image }}:latest
+
+      - name: Scan Image with Trivy
+        uses: aquasecurity/trivy-action@0.21.0
+        with:
+          image-ref: ${{ needs.build.outputs.image }}:${{ steps.meta.outputs.version }}
+          format: table
+          exit-code: 1
+          ignore-unfixed: true
+        env:
+          TRIVY_USERNAME: ${{ github.repository_owner }}
+          TRIVY_PASSWORD: ${{ github.token }}
